@@ -6,7 +6,7 @@ const TRACK_LENGTH = 900;
 const TRACK_RX = 90;
 const TRACK_RZ = 36;
 const LANE_WIDTH = 3.6;
-const RACE_SPEED_SCALE = 0.62;
+const RACE_SPEED_SCALE = 0.42;
 
 const statDefs = [
   { key: "speed", label: "スピード" },
@@ -865,9 +865,36 @@ function dot(a, b) {
 randomizeBtn.addEventListener("click", randomizePlayer);
 startBtn.addEventListener("click", startRace);
 window.addEventListener("resize", resize);
+window.addEventListener("gesturestart", preventZoom, { passive: false });
+window.addEventListener("gesturechange", preventZoom, { passive: false });
+window.addEventListener("gestureend", preventZoom, { passive: false });
+window.addEventListener("dblclick", preventZoom, { passive: false });
+window.addEventListener(
+  "wheel",
+  (event) => {
+    if (event.ctrlKey) event.preventDefault();
+  },
+  { passive: false },
+);
+window.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && ["+", "-", "=", "0"].includes(event.key)) {
+    event.preventDefault();
+  }
+});
+document.addEventListener(
+  "touchmove",
+  (event) => {
+    if (event.touches.length > 1) event.preventDefault();
+  },
+  { passive: false },
+);
 
 buildStatControls();
 renderControls();
 seedIdleRace();
 resize();
 requestAnimationFrame(update);
+
+function preventZoom(event) {
+  event.preventDefault();
+}
