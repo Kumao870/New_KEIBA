@@ -25,6 +25,8 @@ body {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  touch-action: manipulation;
+  overscroll-behavior: none;
   background: #0c1110;
   color: var(--ink);
 }
@@ -424,6 +426,73 @@ button:focus-visible {
     min-height: auto;
     border-left: 0;
     border-top: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .topbar {
+    padding: 10px 12px;
+  }
+
+  .eyebrow {
+    font-size: 0.66rem;
+    margin-bottom: 4px;
+  }
+
+  h1 {
+    max-width: 6.4em;
+    font-size: 1.65rem;
+    line-height: 1.04;
+  }
+
+  .race-status {
+    font-size: 0.72rem;
+  }
+
+  .race-status strong {
+    font-size: 1.02rem;
+  }
+
+  .leaderboard {
+    left: 8px;
+    bottom: 8px;
+    gap: 3px;
+    width: min(240px, 54vw);
+  }
+
+  .leader-row {
+    grid-template-columns: 15px minmax(0, 1fr);
+    min-height: 24px;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    font-size: 0.66rem;
+  }
+
+  .leader-row:nth-child(n + 4) {
+    display: none;
+  }
+
+  .silk {
+    width: 14px;
+    height: 14px;
+    border-width: 1px;
+  }
+
+  .leader-distance {
+    display: none;
+  }
+
+  .horse-label {
+    max-width: 118px;
+    padding: 3px 5px;
+    font-size: 0.62rem;
+  }
+
+  .horse-label-number {
+    min-width: 24px;
+    height: 18px;
+    padding: 0 4px;
   }
 }
 
