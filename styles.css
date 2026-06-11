@@ -451,22 +451,34 @@ button:focus-visible {
   }
 
   .leaderboard {
-    gap: 5px;
-    width: min(360px, calc(100% - 20px));
-    left: 10px;
-    bottom: 10px;
+    top: 10px;
+    right: 10px;
+    bottom: auto;
+    left: auto;
+    gap: 3px;
+    width: min(230px, 34vw);
   }
 
   .leader-row {
-    grid-template-columns: 22px minmax(0, 1fr) 42px;
-    min-height: 30px;
-    padding: 5px 7px;
-    font-size: 0.78rem;
+    grid-template-columns: 18px minmax(0, 1fr) 32px;
+    min-height: 24px;
+    padding: 3px 6px;
+    font-size: 0.68rem;
+    border-radius: 6px;
+  }
+
+  .leader-row:nth-child(n + 5) {
+    display: none;
   }
 
   .silk {
-    width: 18px;
-    height: 18px;
+    width: 15px;
+    height: 15px;
+    border-width: 1px;
+  }
+
+  .leader-distance {
+    font-size: 0.66rem;
   }
 
   .control-panel {
@@ -485,6 +497,35 @@ button:focus-visible {
   select,
   .button-row button {
     min-height: 34px;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 520px) and (orientation: landscape) {
+  .leaderboard {
+    width: min(190px, 32vw);
+  }
+
+  .leader-row {
+    grid-template-columns: 14px minmax(0, 1fr);
+  }
+
+  .leader-distance {
+    display: none;
+  }
+
+  .leader-row:nth-child(n + 4) {
+    display: none;
+  }
+
+  .horse-label {
+    max-width: 112px;
+    font-size: 0.62rem;
+  }
+
+  .horse-label-number {
+    min-width: 24px;
+    height: 18px;
+    padding: 0 4px;
   }
 }
 
