@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EquiTune Derby</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="race-stage" aria-label="3D race view">
+        <canvas id="raceCanvas"></canvas>
+        <div class="horse-labels" id="horseLabels" aria-hidden="true"></div>
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">EquiTune Derby</p>
+            <h1>ステータス調整競馬</h1>
+          </div>
+          <div class="race-status">
+            <span id="racePhase">調整中</span>
+            <strong id="distanceReadout">2周</strong>
+          </div>
+        </div>
+        <div class="leaderboard" id="leaderboard"></div>
+      </section>
+
+      <aside class="control-panel" aria-label="horse tuning controls">
+        <div class="horse-card">
+          <div class="horse-name-row">
+            <label for="horseName">馬名</label>
+            <input id="horseName" maxlength="14" value="カスタムスター" />
+          </div>
+          <div class="budget-row">
+            <span>残りポイント</span>
+            <strong id="budgetLeft">0</strong>
+          </div>
+        </div>
+
+        <div class="stat-list" id="statList"></div>
+
+        <div class="strategy-panel">
+          <label for="strategy">作戦</label>
+          <select id="strategy">
+            <option value="balanced">バランス</option>
+            <option value="front">逃げ</option>
+            <option value="late">差し</option>
+            <option value="inside">内ラチ</option>
+          </select>
+          <label for="lapCount">周回数</label>
+          <select id="lapCount">
+            <option value="1">1周</option>
+            <option value="2" selected>2周</option>
+            <option value="3">3周</option>
+          </select>
+        </div>
+
+        <div class="button-row">
+          <button id="randomizeBtn" type="button">ランダム調整</button>
+          <button id="startBtn" type="button" class="primary">出走</button>
+        </div>
+
+        <section class="result-panel" id="resultPanel" aria-live="polite">
+          <h2>出走表</h2>
+          <ol id="resultList"></ol>
+        </section>
+      </aside>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>
