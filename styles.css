@@ -477,7 +477,7 @@ button:focus-visible {
     font-size: 0.54rem;
   }
 
-  .leader-row:nth-child(n + 3) {
+  .leader-row:nth-child(n + 4) {
     display: none;
   }
 
@@ -547,7 +547,7 @@ button:focus-visible {
     border-radius: 5px;
   }
 
-  .leader-row:nth-child(n + 3) {
+  .leader-row:nth-child(n + 4) {
     display: none;
   }
 

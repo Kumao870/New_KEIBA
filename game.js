@@ -423,14 +423,20 @@ function render3d(now) {
 function drawHorse3d(viewProjection, racer, now) {
   const pos = trackPosition(racer.progress, racer.lane);
   const yaw = pos.yaw;
-  const gait = racer.progress * 0.105 + now * 0.003 + racer.wobble;
-  const stride = Math.sin(gait);
-  const counterStride = Math.sin(gait + Math.PI);
+  const effort = state.raceRunning ? 1 : 0.55;
+  const gait = racer.progress * 0.115 + now * 0.0032 + racer.wobble;
   const cycle = normalizedCycle(gait / (Math.PI * 2));
-  const suspension = Math.max(0, Math.sin(cycle * Math.PI * 2 - 0.35)) ** 2;
-  const bob = 0.08 + suspension * 0.34 + Math.abs(Math.sin(gait * 2)) * 0.05;
-  const bodyPitch = stride * 0.08;
-  const neckPitch = -0.48 + counterStride * 0.12;
+  const stride = Math.sin(gait);
+  const drive = Math.max(0, Math.sin(cycle * Math.PI * 2 + 0.65));
+  const landing = Math.max(0, Math.sin(cycle * Math.PI * 2 - 1.15));
+  const suspension = Math.max(0, Math.sin(cycle * Math.PI * 2 - 2.55)) ** 2;
+  const gather = Math.max(0, Math.sin(cycle * Math.PI * 2 + 2.2));
+  const bob = 0.08 + suspension * (0.34 + effort * 0.2) - landing * 0.08 + drive * 0.05;
+  const bodyPitch = drive * (0.11 + effort * 0.07) - landing * (0.08 + effort * 0.05) + stride * 0.025;
+  const stretch = 1 + suspension * 0.09 - gather * 0.045;
+  const chestDrop = landing * 0.08 - suspension * 0.04;
+  const neckPitch = -0.72 - drive * 0.16 + landing * 0.2 + suspension * 0.08;
+  const headReach = suspension * 0.28 + drive * 0.12 - gather * 0.14;
   const color = racer.color;
   const highlight = color.map((value) => Math.min(1, value * 1.15 + 0.05));
   const dark = [0.08, 0.06, 0.05];
@@ -438,32 +444,32 @@ function drawHorse3d(viewProjection, racer, now) {
   const riderSkin = [0.96, 0.86, 0.72];
   const riderSilk = highlight;
 
-  drawHorsePart(viewProjection, pos, [-0.1, 1.22 + bob, 0], [2.9, 0.86, 0.72], color, [0, yaw, bodyPitch]);
-  drawHorsePart(viewProjection, pos, [-1.05, 1.27 + bob - stride * 0.05, 0], [1.05, 0.78, 0.76], color, [0, yaw, bodyPitch - 0.08]);
-  drawHorsePart(viewProjection, pos, [1.05, 1.36 + bob + stride * 0.04, 0], [0.95, 0.82, 0.68], highlight, [0, yaw, bodyPitch + 0.08]);
-  drawHorsePart(viewProjection, pos, [1.55, 1.83 + bob - stride * 0.08, 0], [0.52, 1.18, 0.42], color, [0, yaw, neckPitch]);
-  drawHorsePart(viewProjection, pos, [2.17, 2.12 + bob - stride * 0.14, 0], [0.88, 0.42, 0.45], color, [0, yaw, -0.08 + counterStride * 0.1]);
-  drawHorsePart(viewProjection, pos, [2.62, 2.0 + bob - stride * 0.16, 0], [0.36, 0.28, 0.32], color, [0, yaw, -0.2 + counterStride * 0.08]);
-  drawHorsePart(viewProjection, pos, [1.25, 2.05 + bob - stride * 0.1, 0], [0.14, 0.88, 0.14], dark, [0, yaw, neckPitch + 0.06]);
-  drawHorsePart(viewProjection, pos, [2.25, 2.43 + bob - stride * 0.14, -0.16], [0.14, 0.32, 0.1], dark, [0, yaw, 0.24]);
-  drawHorsePart(viewProjection, pos, [2.25, 2.43 + bob - stride * 0.14, 0.16], [0.14, 0.32, 0.1], dark, [0, yaw, 0.24]);
-  drawHorsePart(viewProjection, pos, [-1.75, 1.42 + bob + stride * 0.1, 0], [0.22, 1.18, 0.22], dark, [0, yaw, 0.88 + stride * 0.16]);
+  drawHorsePart(viewProjection, pos, [-0.1, 1.22 + bob, 0], [2.9 * stretch, 0.86, 0.72], color, [0, yaw, bodyPitch]);
+  drawHorsePart(viewProjection, pos, [-1.08 - gather * 0.06, 1.28 + bob + drive * 0.04, 0], [1.05, 0.78, 0.76], color, [0, yaw, bodyPitch - 0.1]);
+  drawHorsePart(viewProjection, pos, [1.04 + suspension * 0.08, 1.34 + bob - chestDrop, 0], [0.98, 0.82, 0.68], highlight, [0, yaw, bodyPitch + 0.08]);
+  drawHorsePart(viewProjection, pos, [1.5 + headReach * 0.18, 1.82 + bob - landing * 0.13, 0], [0.52, 1.22, 0.42], color, [0, yaw, neckPitch]);
+  drawHorsePart(viewProjection, pos, [2.14 + headReach, 2.02 + bob - landing * 0.22, 0], [0.9, 0.42, 0.45], color, [0, yaw, -0.16 - drive * 0.1 + landing * 0.18]);
+  drawHorsePart(viewProjection, pos, [2.6 + headReach, 1.88 + bob - landing * 0.24, 0], [0.36, 0.28, 0.32], color, [0, yaw, -0.28 - drive * 0.1 + landing * 0.12]);
+  drawHorsePart(viewProjection, pos, [1.2 + headReach * 0.1, 2.02 + bob - landing * 0.12, 0], [0.14, 0.92, 0.14], dark, [0, yaw, neckPitch + 0.06]);
+  drawHorsePart(viewProjection, pos, [2.22 + headReach, 2.34 + bob - landing * 0.16, -0.16], [0.14, 0.32, 0.1], dark, [0, yaw, 0.18]);
+  drawHorsePart(viewProjection, pos, [2.22 + headReach, 2.34 + bob - landing * 0.16, 0.16], [0.14, 0.32, 0.1], dark, [0, yaw, 0.18]);
+  drawHorsePart(viewProjection, pos, [-1.78 - suspension * 0.08, 1.42 + bob + drive * 0.18, 0], [0.22, 1.24, 0.22], dark, [0, yaw, 0.9 + drive * 0.38 - landing * 0.14]);
 
-  drawHorsePart(viewProjection, pos, [-0.35, 1.75 + bob, 0], [1.0, 0.14, 0.8], leather, [0, yaw, bodyPitch]);
-  drawHorsePart(viewProjection, pos, [-0.27, 2.02 + bob, 0], [0.5, 0.64, 0.42], riderSilk, [0, yaw, 0.22 + bodyPitch]);
-  drawHorsePart(viewProjection, pos, [-0.02, 2.5 + bob - stride * 0.03, 0], [0.38, 0.38, 0.36], riderSkin);
-  drawHorsePart(viewProjection, pos, [0.0, 2.76 + bob - stride * 0.03, 0], [0.5, 0.16, 0.42], riderSilk);
-  drawHorsePart(viewProjection, pos, [-0.62, 1.72 + bob, -0.28], [0.16, 0.9, 0.14], leather, [0, yaw, 0.42 + stride * 0.08]);
-  drawHorsePart(viewProjection, pos, [-0.62, 1.72 + bob, 0.28], [0.16, 0.9, 0.14], leather, [0, yaw, -0.42 - stride * 0.08]);
+  drawHorsePart(viewProjection, pos, [-0.35, 1.76 + bob, 0], [1.0, 0.14, 0.8], leather, [0, yaw, bodyPitch]);
+  drawHorsePart(viewProjection, pos, [-0.24, 2.0 + bob - suspension * 0.08, 0], [0.5, 0.64, 0.42], riderSilk, [0, yaw, 0.5 + bodyPitch + drive * 0.08]);
+  drawHorsePart(viewProjection, pos, [-0.14, 2.47 + bob - suspension * 0.08, 0], [0.38, 0.38, 0.36], riderSkin);
+  drawHorsePart(viewProjection, pos, [-0.13, 2.72 + bob - suspension * 0.08, 0], [0.5, 0.16, 0.42], riderSilk);
+  drawHorsePart(viewProjection, pos, [-0.64, 1.7 + bob, -0.28], [0.16, 0.9, 0.14], leather, [0, yaw, 0.5 + drive * 0.16 - landing * 0.08]);
+  drawHorsePart(viewProjection, pos, [-0.64, 1.7 + bob, 0.28], [0.16, 0.9, 0.14], leather, [0, yaw, -0.5 - drive * 0.16 + landing * 0.08]);
 
   const legs = [
-    { x: -0.95, z: -0.28, phase: 0.0, rear: true },
-    { x: -0.95, z: 0.28, phase: 0.16, rear: true },
-    { x: 0.92, z: -0.28, phase: 0.52, rear: false },
-    { x: 0.92, z: 0.28, phase: 0.68, rear: false },
+    { x: -1.0, z: -0.28, phase: 0.0, rear: true },
+    { x: -0.9, z: 0.28, phase: 0.12, rear: true },
+    { x: 0.86, z: -0.28, phase: 0.46, rear: false },
+    { x: 1.0, z: 0.28, phase: 0.58, rear: false },
   ];
   for (const leg of legs) {
-    const pose = gallopLegPose(cycle, leg.phase, leg.rear);
+    const pose = gallopLegPose(cycle, leg.phase, leg.rear, effort);
     const hip = [leg.x, 1.02 + bob * 0.14, leg.z];
     const knee = [leg.x + pose.kneeX, pose.kneeY + bob * 0.05, leg.z];
     const hoof = [leg.x + pose.hoofX, pose.hoofY, leg.z];
@@ -501,7 +507,9 @@ function drawBox(viewProjection, translation, scale, color, rotation = [0, 0, 0]
 }
 
 function drawTrack(viewProjection) {
+  drawEnvironment(viewProjection);
   drawBox(viewProjection, [0, -0.16, 0], [230, 0.14, 122], [0.14, 0.34, 0.24]);
+  drawGrandstands(viewProjection);
 
   const segments = 192;
   drawOvalRing(viewProjection, TRACK_RX + 19, TRACK_RZ + 8, TRACK_RX - 20, TRACK_RZ - 8, [0.62, 0.34, 0.25], 0.02);
@@ -534,6 +542,57 @@ function drawTrack(viewProjection) {
   drawBox(viewProjection, [finish.x, 0.18, finish.z], [0.5, 0.18, 34], [0.95, 0.92, 0.82], [0, finish.yaw, 0]);
   drawBox(viewProjection, [finish.x, 5.2, finish.z - 17], [0.55, 10, 0.55], [0.95, 0.92, 0.82]);
   drawBox(viewProjection, [finish.x, 5.2, finish.z + 17], [0.55, 10, 0.55], [0.95, 0.92, 0.82]);
+}
+
+function drawEnvironment(viewProjection) {
+  drawBox(viewProjection, [0, -0.34, 0], [520, 0.08, 330], [0.18, 0.45, 0.3]);
+  drawBox(viewProjection, [0, 0.06, 98], [440, 0.08, 54], [0.2, 0.5, 0.34]);
+  drawBox(viewProjection, [0, 0.08, -122], [440, 0.08, 60], [0.17, 0.42, 0.3]);
+  drawBox(viewProjection, [0, 18, -164], [520, 36, 1.2], [0.55, 0.72, 0.78]);
+  drawBox(viewProjection, [0, 28, -165], [520, 10, 1.4], [0.68, 0.8, 0.83]);
+
+  for (let x = -230; x <= 230; x += 18) {
+    const h = 3.2 + ((x * x) % 9) * 0.18;
+    drawBox(viewProjection, [x, h / 2, -108], [2.6, h, 2.6], [0.22, 0.15, 0.08]);
+    drawBox(viewProjection, [x, h + 1.2, -108], [7.5, 4.2, 5.2], [0.08, 0.32, 0.16]);
+  }
+
+  for (let x = -180; x <= 180; x += 45) {
+    drawBox(viewProjection, [x, 1.0, 116], [22, 2, 8], [0.48, 0.5, 0.5]);
+    drawBox(viewProjection, [x, 2.4, 116], [24, 0.6, 9], [0.76, 0.78, 0.74]);
+  }
+}
+
+function drawGrandstands(viewProjection) {
+  drawBox(viewProjection, [0, 1.15, -82], [150, 2.3, 5.5], [0.2, 0.22, 0.25]);
+  drawBox(viewProjection, [0, 2.35, -87], [158, 0.75, 8.5], [0.3, 0.32, 0.34], [0.12, 0, 0]);
+  drawBox(viewProjection, [0, 3.35, -92], [166, 0.75, 9], [0.36, 0.38, 0.4], [0.12, 0, 0]);
+  drawBox(viewProjection, [0, 4.25, -96], [174, 0.45, 12], [0.78, 0.8, 0.76], [0.08, 0, 0]);
+
+  for (let x = -74; x <= 74; x += 8) {
+    drawBox(viewProjection, [x, 2.8, -78], [0.28, 3.7, 0.28], [0.82, 0.82, 0.78]);
+  }
+
+  const crowdColors = [
+    [0.9, 0.22, 0.18],
+    [0.2, 0.52, 0.92],
+    [0.95, 0.78, 0.25],
+    [0.24, 0.72, 0.48],
+    [0.86, 0.36, 0.82],
+    [0.92, 0.92, 0.88],
+  ];
+
+  for (let row = 0; row < 5; row += 1) {
+    for (let x = -72; x <= 72; x += 4) {
+      const color = crowdColors[(row + Math.floor((x + 72) / 4)) % crowdColors.length];
+      drawBox(viewProjection, [x, 1.65 + row * 0.42, -81 - row * 2], [0.8, 0.38, 0.55], color);
+    }
+  }
+
+  for (let x = -82; x <= 82; x += 28) {
+    drawBox(viewProjection, [x, 5.2, -92], [0.65, 7.2, 0.65], [0.62, 0.64, 0.62]);
+    drawBox(viewProjection, [x, 9.05, -91.5], [5.4, 0.42, 1.8], [0.95, 0.9, 0.72]);
+  }
 }
 
 function drawOvalRing(viewProjection, outerRx, outerRz, innerRx, innerRz, color, y, segments = 192) {
@@ -602,27 +661,41 @@ function localToWorld(pos, offset) {
   ];
 }
 
-function gallopLegPose(cycle, offset, rear) {
+function gallopLegPose(cycle, offset, rear, effort) {
   const phase = normalizedCycle(cycle + offset);
-  const stancePortion = rear ? 0.38 : 0.34;
-  let hoofX;
-  let hoofY;
-  let kneeX;
-  let kneeY;
+  const reach = rear ? 0.72 : 0.86;
+  const fold = rear ? 0.58 : 0.68;
+  const jointBias = rear ? -0.18 : 0.16;
+  let hoofX = 0;
+  let hoofY = 0.08;
+  let kneeX = jointBias;
+  let kneeY = 0.6;
 
-  if (phase < stancePortion) {
-    const t = phase / stancePortion;
-    hoofX = lerp(0.54, -0.46, t);
-    hoofY = 0.08;
-    kneeX = hoofX * 0.35 + (rear ? -0.12 : 0.1);
-    kneeY = 0.56 - Math.sin(t * Math.PI) * 0.08;
-  } else {
-    const t = (phase - stancePortion) / (1 - stancePortion);
+  if (phase < 0.24) {
+    const t = phase / 0.24;
+    hoofX = lerp(reach, -reach * 0.78, t);
+    hoofY = 0.07;
+    kneeX = hoofX * 0.38 + jointBias;
+    kneeY = 0.54 - Math.sin(t * Math.PI) * (0.07 + effort * 0.03);
+  } else if (phase < 0.38) {
+    const t = (phase - 0.24) / 0.14;
+    hoofX = lerp(-reach * 0.78, -reach * 0.36, t);
+    hoofY = 0.08 + t * (0.14 + effort * 0.08);
+    kneeX = lerp(-0.42, -0.12, t) + jointBias;
+    kneeY = 0.55 + t * (0.28 + effort * 0.08);
+  } else if (phase < 0.7) {
+    const t = (phase - 0.38) / 0.32;
     const lift = Math.sin(t * Math.PI);
-    hoofX = lerp(-0.46, 0.62, t);
-    hoofY = 0.1 + lift * (rear ? 0.42 : 0.48);
-    kneeX = lerp(-0.18, 0.28, t) + (rear ? -0.1 : 0.12);
-    kneeY = 0.64 + lift * 0.28;
+    hoofX = lerp(-reach * 0.36, reach * 0.34, t);
+    hoofY = 0.16 + lift * fold * (1 + effort * 0.32);
+    kneeX = lerp(-0.16, 0.32, t) + jointBias;
+    kneeY = 0.72 + lift * (0.42 + effort * 0.12);
+  } else {
+    const t = (phase - 0.7) / 0.3;
+    hoofX = lerp(reach * 0.34, reach, t);
+    hoofY = 0.1 + Math.sin((1 - t) * Math.PI) * (0.24 + effort * 0.08);
+    kneeX = lerp(0.36, reach * 0.34, t) + jointBias;
+    kneeY = lerp(0.86, 0.6, t);
   }
 
   return {
@@ -630,8 +703,8 @@ function gallopLegPose(cycle, offset, rear) {
     hoofY,
     kneeX,
     kneeY,
-    upperAngle: (rear ? -0.2 : 0.18) + (kneeX - hoofX) * 0.35,
-    lowerAngle: (rear ? 0.34 : -0.32) + (hoofX - kneeX) * 0.52,
+    upperAngle: (rear ? -0.26 : 0.2) + (kneeX - hoofX) * 0.48,
+    lowerAngle: (rear ? 0.42 : -0.38) + (hoofX - kneeX) * 0.66,
   };
 }
 
