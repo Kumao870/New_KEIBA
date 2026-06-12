@@ -589,41 +589,78 @@ input[aria-invalid="true"]:focus {
   background: #f1d374;
 }
 
-@media (max-width: 920px) and (orientation: portrait) {
+@media (orientation: portrait) {
   body {
-    overflow-y: auto;
+    overflow: hidden;
   }
 
   .app {
     grid-template-columns: 1fr;
-    height: auto;
-    min-height: 100dvh;
-    overflow: visible;
+    grid-template-rows: minmax(0, 38dvh) minmax(0, 62dvh);
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .race-stage {
-    height: 58dvh;
-    min-height: 360px;
+    height: 38dvh;
+    min-height: 0;
   }
 
   .app:not(.racing) {
-    grid-template-rows: minmax(250px, 42dvh) minmax(0, 1fr);
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 34dvh) minmax(0, 66dvh);
   }
 
   .app:not(.racing) .race-stage {
-    height: 42dvh;
-    min-height: 250px;
+    height: 34dvh;
+    min-height: 0;
   }
 
   .control-panel {
-    height: auto;
+    height: 62dvh;
     min-height: auto;
+    overflow-y: auto;
     border-left: 0;
     border-top: 1px solid var(--line);
+    padding: 12px;
+  }
+
+  .app:not(.racing) .control-panel {
+    height: 66dvh;
   }
 }
 
 @media (max-width: 760px) and (orientation: portrait) {
+  .horse-card,
+  .strategy-panel,
+  .stat-control {
+    padding: 10px;
+  }
+
+  .stat-list {
+    gap: 8px;
+  }
+
+  .stat-actions {
+    grid-template-columns: 36px minmax(0, 1fr) 64px 36px;
+    gap: 6px;
+  }
+
+  .stat-step {
+    width: 36px;
+    min-height: 34px;
+  }
+
+  .stat-actions input[type="number"] {
+    min-height: 34px;
+    padding: 4px 6px;
+  }
+
+  .match-name-row {
+    grid-template-columns: minmax(0, 1fr) 108px;
+  }
+
   .topbar {
     padding: 10px 12px;
   }
