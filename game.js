@@ -9,7 +9,7 @@ const LANE_WIDTH = 3.6;
 const RACE_SPEED_SCALE = 0.42;
 const INTRO_TITLE_MS = 2200;
 const LINEUP_WALK_MS = 14000;
-const LINEUP_READY_MS = 1000;
+const LINEUP_READY_MS = 1500;
 const MATCH_NAME_MAX = 12;
 
 const statDefs = [
@@ -37,6 +37,15 @@ const horseCoatColors = [
   [0.5, 0.46, 0.39],
   [0.34, 0.18, 0.09],
 ];
+const bibDigitSegments = {
+  0: ["a", "b", "c", "d", "e", "f"],
+  1: ["b", "c"],
+  2: ["a", "b", "g", "e", "d"],
+  3: ["a", "b", "g", "c", "d"],
+  4: ["f", "g", "b", "c"],
+  5: ["a", "f", "g", "c", "d"],
+  6: ["a", "f", "g", "e", "c", "d"],
+};
 const aiNames = ["ミッドライン", "アオバスプリント", "クロガネロード", "セブンベル", "ハヤテノヴェール"];
 const conditionTable = [
   { label: "絶好調", emoji: "🔥", speed: 1.08, stamina: 0.94, finish: 1.1, weight: 12 },
@@ -55,6 +64,7 @@ const state = {
   startedAt: 0,
   introStartedAt: 0,
   raceStartAt: 0,
+  lineupReadyAt: 0,
   raceStarted: false,
   matchName: "エキチューンダービー",
   showStartErrors: false,
@@ -397,8 +407,9 @@ function startRace() {
   app.classList.add("racing");
   controlPanel.classList.add("racing");
   state.introStartedAt = performance.now();
-  state.raceStartAt = state.introStartedAt + LINEUP_WALK_MS + LINEUP_READY_MS;
-  state.startedAt = state.raceStartAt;
+  state.raceStartAt = 0;
+  state.lineupReadyAt = 0;
+  state.startedAt = 0;
   state.lastFrame = state.introStartedAt;
   state.cameraX = -135;
   racePhase.textContent = "開幕演出";
@@ -456,6 +467,11 @@ function update(now) {
         racer.displayProgress = lerp(startOffset, 0, personalRatio);
         racer.walking = personalRatio < 1;
       }
+      const allLinedUp = state.racers.every((racer) => !racer.walking);
+      if (allLinedUp && !state.lineupReadyAt) {
+        state.lineupReadyAt = now;
+        state.raceStartAt = now + LINEUP_READY_MS;
+      }
 
       if (introElapsed < INTRO_TITLE_MS) {
         raceIntro.classList.add("active");
@@ -467,7 +483,7 @@ function update(now) {
       } else {
         raceIntro.classList.remove("active");
         raceIntro.classList.remove("countdown");
-        if (lineupRatio < 1) {
+        if (!allLinedUp) {
           racePhase.textContent = "本馬場入場";
           distanceReadout.textContent = "整列中";
         } else {
@@ -476,7 +492,7 @@ function update(now) {
         }
       }
 
-      if (now >= state.raceStartAt) {
+      if (state.raceStartAt && now >= state.raceStartAt) {
         state.raceStarted = true;
         state.startedAt = now;
         for (const racer of state.racers) {
@@ -491,10 +507,15 @@ function update(now) {
         renderLeaderboard();
       }
     } else {
+      const leaderBeforeUpdate = Math.max(...state.racers.map((racer) => racer.progress));
       for (const racer of state.racers) {
         if (racer.finishTime !== null) continue;
         const ratio = racer.progress / state.raceDistance;
-        racer.progress += paceFor(racer, ratio, now) * RACE_SPEED_SCALE * dt;
+        const gap = leaderBeforeUpdate - racer.progress;
+        const packPull = Math.min(3.8, Math.max(0, gap - 2) * 0.055);
+        const leaderDrag = gap < 0.2 && leaderBeforeUpdate > 80 ? 0.9 : 0;
+        const pace = paceFor(racer, ratio, now) + packPull - leaderDrag;
+        racer.progress += pace * RACE_SPEED_SCALE * dt;
         if (racer.progress >= state.raceDistance) {
           racer.progress = state.raceDistance;
           racer.finishTime = (now - state.startedAt) / 1000;
@@ -518,6 +539,8 @@ function update(now) {
 function finishRace() {
   state.raceRunning = false;
   state.raceStarted = false;
+  state.lineupReadyAt = 0;
+  state.raceStartAt = 0;
   app.classList.remove("racing");
   controlPanel.classList.remove("racing");
   raceIntro.classList.remove("active");
@@ -648,10 +671,13 @@ function drawHorse3d(viewProjection, racer, now) {
   const compactView = isCompactRaceView();
   state.horseRenderScale = racer.previewScale || (compactView ? 1.2 : 1);
   const walking = Boolean(racer.walking && !state.raceStarted);
-  const moving = Boolean(racer.previewPos || walking || state.raceStarted);
+  const idle = Boolean(state.raceRunning && !state.raceStarted && !walking && !racer.previewPos);
+  const moving = Boolean(racer.previewPos || walking || idle || state.raceStarted);
   const effort = moving ? (state.raceRunning ? 1.38 : 1.08) : 0.35;
   const gait = walking
     ? now * 0.00155 + racer.wobble
+    : idle
+      ? now * 0.0009 + racer.wobble
     : moving
       ? visibleProgress * 0.15 + now * 0.0046 + racer.wobble
       : racer.wobble;
@@ -662,16 +688,21 @@ function drawHorse3d(viewProjection, racer, now) {
   const suspension = Math.max(0, Math.sin(cycle * Math.PI * 2 - 2.55)) ** 2;
   const gather = Math.max(0, Math.sin(cycle * Math.PI * 2 + 2.2));
   const walkSway = Math.sin(cycle * Math.PI * 4);
-  const bob = walking
+  const idleBreath = Math.sin(gait * 1.7);
+  const bob = idle
+    ? 0.08 + idleBreath * 0.035
+    : walking
     ? 0.08 + Math.abs(walkSway) * 0.055
     : 0.08 + suspension * (0.34 + effort * 0.2) - landing * 0.08 + drive * 0.05;
-  const bodyPitch = walking
+  const bodyPitch = idle
+    ? idleBreath * 0.018
+    : walking
     ? stride * 0.035
     : drive * (0.11 + effort * 0.07) - landing * (0.08 + effort * 0.05) + stride * 0.025;
   const stretch = walking ? 1 : 1 + suspension * 0.09 - gather * 0.045;
   const chestDrop = walking ? Math.max(0, -walkSway) * 0.035 : landing * 0.08 - suspension * 0.04;
-  const neckPitch = walking ? -0.58 + stride * 0.06 : -0.72 - drive * 0.16 + landing * 0.2 + suspension * 0.08;
-  const headReach = walking ? stride * 0.08 : suspension * 0.28 + drive * 0.12 - gather * 0.14;
+  const neckPitch = idle ? -0.55 + idleBreath * 0.04 : walking ? -0.58 + stride * 0.06 : -0.72 - drive * 0.16 + landing * 0.2 + suspension * 0.08;
+  const headReach = idle ? idleBreath * 0.04 : walking ? stride * 0.08 : suspension * 0.28 + drive * 0.12 - gather * 0.14;
   const color = racer.coatColor || horseCoatColors[0];
   const bibColor = racer.bibColor || bibColors[0];
   const highlight = color.map((value) => Math.min(1, value * 1.18 + 0.06));
@@ -696,6 +727,8 @@ function drawHorse3d(viewProjection, racer, now) {
   drawHorsePart(viewProjection, pos, [-0.34, 1.39 + bob, 0.4], [1.14, 0.52, 0.04], bibColor, [0, yaw, bodyPitch]);
   drawHorsePart(viewProjection, pos, [-0.34, 1.4 + bob, -0.43], [0.42, 0.24, 0.025], [0.96, 0.94, 0.86], [0, yaw, bodyPitch]);
   drawHorsePart(viewProjection, pos, [-0.34, 1.4 + bob, 0.43], [0.42, 0.24, 0.025], [0.96, 0.94, 0.86], [0, yaw, bodyPitch]);
+  drawBibNumber(viewProjection, pos, bob, bodyPitch, racer.number, -0.455);
+  drawBibNumber(viewProjection, pos, bob, bodyPitch, racer.number, 0.455);
   drawHorsePart(viewProjection, pos, [-0.24, 2.0 + bob - suspension * 0.08, 0], [0.5, 0.64, 0.42], riderSilk, [0, yaw, 0.5 + bodyPitch + drive * 0.08]);
   drawHorsePart(viewProjection, pos, [-0.14, 2.47 + bob - suspension * 0.08, 0], [0.38, 0.38, 0.36], riderSkin);
   drawHorsePart(viewProjection, pos, [-0.13, 2.72 + bob - suspension * 0.08, 0], [0.5, 0.16, 0.42], riderSilk);
@@ -709,7 +742,7 @@ function drawHorse3d(viewProjection, racer, now) {
     { x: 1.0, z: 0.28, phase: walking ? 0.76 : 0.58, rear: false },
   ];
   for (const leg of legs) {
-    const pose = walking ? walkLegPose(cycle, leg.phase, leg.rear) : gallopLegPose(cycle, leg.phase, leg.rear, effort);
+    const pose = idle ? idleLegPose(leg.rear, leg.z, cycle) : walking ? walkLegPose(cycle, leg.phase, leg.rear) : gallopLegPose(cycle, leg.phase, leg.rear, effort);
     const hip = [leg.x, 1.02 + bob * 0.14, leg.z];
     const knee = [leg.x + pose.kneeX, pose.kneeY + bob * 0.05, leg.z];
     const hoof = [leg.x + pose.hoofX, pose.hoofY, leg.z];
@@ -726,6 +759,27 @@ function drawHorsePart(viewProjection, pos, offset, scale, color, rotation) {
   const scaledSize = [scale[0] * visualScale, scale[1] * visualScale, scale[2] * visualScale];
   const translated = localToWorld(pos, scaledOffset);
   drawBox(viewProjection, translated, scaledSize, color, rotation || [0, pos.yaw, 0]);
+}
+
+function drawBibNumber(viewProjection, pos, bob, bodyPitch, number, z) {
+  const segments = bibDigitSegments[number] || bibDigitSegments[0];
+  const color = [0.05, 0.045, 0.04];
+  const y = 1.405 + bob;
+  const x = -0.34;
+  const segmentMap = {
+    a: [0, 0.075, 0.16, 0.026],
+    b: [0.09, 0.035, 0.028, 0.092],
+    c: [0.09, -0.055, 0.028, 0.092],
+    d: [0, -0.105, 0.16, 0.026],
+    e: [-0.09, -0.055, 0.028, 0.092],
+    f: [-0.09, 0.035, 0.028, 0.092],
+    g: [0, -0.015, 0.15, 0.024],
+  };
+
+  for (const segment of segments) {
+    const [dx, dy, sx, sy] = segmentMap[segment];
+    drawHorsePart(viewProjection, pos, [x + dx, y + dy, z], [sx, sy, 0.018], color, [0, pos.yaw, bodyPitch]);
+  }
 }
 
 function drawBox(viewProjection, translation, scale, color, rotation = [0, 0, 0]) {
@@ -755,20 +809,7 @@ function drawTrack(viewProjection) {
   drawGrandstands(viewProjection);
 
   const segments = 192;
-  drawOvalRing(viewProjection, TRACK_RX + 19, TRACK_RZ + 8, TRACK_RX - 20, TRACK_RZ - 8, [0.62, 0.34, 0.25], 0.02);
-  for (let lane = 1; lane < 6; lane += 1) {
-    const laneOffset = (lane - 2.5) * LANE_WIDTH;
-    drawOvalRing(
-      viewProjection,
-      TRACK_RX + laneOffset + 0.13,
-      TRACK_RZ + laneOffset * 0.42 + 0.13,
-      TRACK_RX + laneOffset - 0.13,
-      TRACK_RZ + laneOffset * 0.42 - 0.13,
-      [0.82, 0.72, 0.56],
-      0.08,
-      segments,
-    );
-  }
+  drawOvalRing(viewProjection, TRACK_RX + 19, TRACK_RZ + 8, TRACK_RX - 20, TRACK_RZ - 8, [0.26, 0.54, 0.3], 0.02);
 
   for (const railLane of [-1.2, 6.2]) {
     for (let i = 0; i < segments; i += 1) {
@@ -782,7 +823,6 @@ function drawTrack(viewProjection) {
   }
 
   const finish = trackPosition(0, 2.4);
-  drawBox(viewProjection, [finish.x, 0.18, finish.z], [0.5, 0.18, 34], [0.95, 0.92, 0.82], [0, finish.yaw, 0]);
   drawBox(viewProjection, [finish.x, 5.2, finish.z - 17], [0.55, 10, 0.55], [0.95, 0.92, 0.82]);
   drawBox(viewProjection, [finish.x, 5.2, finish.z + 17], [0.55, 10, 0.55], [0.95, 0.92, 0.82]);
 }
@@ -975,6 +1015,16 @@ function walkLegPose(cycle, offset, rear) {
     kneeY = 0.56 - Math.sin(t * Math.PI) * 0.04;
   }
 
+  return { hoofX, hoofY, kneeX, kneeY };
+}
+
+function idleLegPose(rear, side, cycle) {
+  const sideShift = side < 0 ? -0.04 : 0.04;
+  const breath = Math.sin(cycle * Math.PI * 2) * 0.025;
+  const hoofX = rear ? -0.18 + sideShift : 0.16 - sideShift;
+  const hoofY = 0.07;
+  const kneeX = rear ? -0.18 : 0.16;
+  const kneeY = 0.58 + breath;
   return { hoofX, hoofY, kneeX, kneeY };
 }
 
