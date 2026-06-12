@@ -14,6 +14,15 @@
       <section class="race-stage" aria-label="3D race view">
         <canvas id="raceCanvas"></canvas>
         <div class="horse-labels" id="horseLabels" aria-hidden="true"></div>
+        <div class="race-intro" id="raceIntro" aria-hidden="true">
+          <p class="race-intro-kicker">Race Title</p>
+          <strong id="raceIntroTitle">EquiTune Derby</strong>
+          <span id="raceIntroCountdown">まもなく発走</span>
+        </div>
+        <div class="preview-copy">
+          <p class="eyebrow">EquiTune Derby</p>
+          <h1>ステータス調整競馬</h1>
+        </div>
         <div class="topbar">
           <div>
             <p class="eyebrow">EquiTune Derby</p>
@@ -30,10 +39,31 @@
       <aside class="control-panel" aria-label="horse tuning controls">
         <div class="horse-card">
           <div class="horse-name-row">
+            <div class="field-label-row">
+              <label for="matchName">試合名</label>
+              <span id="matchNameCount">0/12</span>
+            </div>
+            <p class="field-message" id="matchNameMessage" hidden></p>
+            <div class="match-name-row">
+              <input id="matchName" maxlength="12" value="エキチューン" />
+              <select id="matchSuffix" aria-label="試合名の語尾">
+                <option value="ステークス">ステークス</option>
+                <option value="カップ">カップ</option>
+                <option value="杯">杯</option>
+                <option value="賞">賞</option>
+                <option value="記念">記念</option>
+                <option value="ダービー" selected>ダービー</option>
+                <option value="オークス">オークス</option>
+              </select>
+            </div>
+          </div>
+          <div class="horse-name-row">
             <label for="horseName">馬名</label>
+            <p class="field-message" id="horseNameMessage" hidden></p>
             <input id="horseName" maxlength="14" value="カスタムスター" />
           </div>
           <div class="budget-row">
+            <p class="field-message" id="budgetMessage" hidden></p>
             <span>残りポイント</span>
             <strong id="budgetLeft">0</strong>
           </div>
@@ -42,13 +72,6 @@
         <div class="stat-list" id="statList"></div>
 
         <div class="strategy-panel">
-          <label for="strategy">作戦</label>
-          <select id="strategy">
-            <option value="balanced">バランス</option>
-            <option value="front">逃げ</option>
-            <option value="late">差し</option>
-            <option value="inside">内ラチ</option>
-          </select>
           <label for="lapCount">周回数</label>
           <select id="lapCount">
             <option value="1">1周</option>
@@ -61,11 +84,6 @@
           <button id="randomizeBtn" type="button">ランダム調整</button>
           <button id="startBtn" type="button" class="primary">出走</button>
         </div>
-
-        <section class="result-panel" id="resultPanel" aria-live="polite">
-          <h2>出走表</h2>
-          <ol id="resultList"></ol>
-        </section>
       </aside>
     </main>
 
