@@ -34,6 +34,9 @@
           </div>
         </div>
         <div class="leaderboard" id="leaderboard"></div>
+        <div class="race-meta" id="raceMeta"></div>
+        <div class="commentary" id="commentary"></div>
+        <div class="result-detail" id="resultDetail" hidden></div>
       </section>
 
       <aside class="control-panel" aria-label="horse tuning controls">
@@ -78,6 +81,38 @@
             <option value="2" selected>2周</option>
             <option value="3">3周</option>
           </select>
+          <label for="distanceType">距離タイプ</label>
+          <select id="distanceType">
+            <option value="sprint">短距離</option>
+            <option value="mile">マイル</option>
+            <option value="middle" selected>中距離</option>
+            <option value="long">長距離</option>
+          </select>
+          <label>馬場状態</label>
+          <div class="readonly-field" id="trackConditionPreview">ランダム</div>
+          <label for="runningStyle">脚質</label>
+          <select id="runningStyle">
+            <option value="front">逃げ</option>
+            <option value="stalker" selected>先行</option>
+            <option value="closer">差し</option>
+            <option value="deep">追込</option>
+          </select>
+          <label for="traitSelect">特性</label>
+          <select id="traitSelect">
+            <option value="finish" selected>末脚</option>
+            <option value="mud">道悪適性</option>
+            <option value="corner">コーナー巧者</option>
+            <option value="start">スタート上手</option>
+            <option value="hill">坂適性</option>
+          </select>
+          <label class="toggle-row" for="voiceToggle">
+            <input id="voiceToggle" type="checkbox" />
+            <span>実況音声</span>
+          </label>
+          <label class="toggle-row" for="labelToggle">
+            <input id="labelToggle" type="checkbox" checked />
+            <span>馬上表示</span>
+          </label>
         </div>
 
         <div class="button-row">
