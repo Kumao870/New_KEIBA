@@ -35,6 +35,16 @@
         </div>
         <div class="leaderboard" id="leaderboard"></div>
         <div class="race-meta" id="raceMeta"></div>
+        <div class="broadcast-hud" id="broadcastHud" hidden>
+          <div class="position-map" id="positionMap" aria-label="馬群位置"></div>
+          <div class="course-info">
+            <div class="mini-course" id="miniCourse" aria-label="コース位置"></div>
+            <div class="telemetry">
+              <span id="remainingReadout">残り --m</span>
+              <strong id="speedReadout">--.-km/h</strong>
+            </div>
+          </div>
+        </div>
         <div class="commentary" id="commentary"></div>
         <div class="result-detail" id="resultDetail" hidden></div>
       </section>
@@ -110,9 +120,19 @@
             <span>実況音声</span>
           </label>
           <label class="toggle-row" for="labelToggle">
-            <input id="labelToggle" type="checkbox" checked />
+            <input id="labelToggle" type="checkbox" />
             <span>馬上表示</span>
           </label>
+          <label class="toggle-row" for="fanfareToggle">
+            <input id="fanfareToggle" type="checkbox" />
+            <span>ファンファーレ</span>
+          </label>
+          <label for="fanfareSelect">ファンファーレ音源</label>
+          <select id="fanfareSelect">
+            <option value="G1ファンファーレ(京都阪神競馬).mp3">京都・阪神G1</option>
+            <option value="G1ファンファーレ(中山競馬場).mp3">中山G1</option>
+            <option value="G1ファンファーレ(宝塚記念).mp3">宝塚記念</option>
+          </select>
         </div>
 
         <div class="button-row">

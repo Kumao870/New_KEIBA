@@ -10,6 +10,7 @@ const LANE_WIDTH = 1.18;
 const TRACK_MARGIN = 17;
 const RACE_SPEED_SCALE = 0.42;
 const INTRO_TITLE_MS = 2200;
+const INTRO_FADE_DELAY_MS = 90;
 const LINEUP_WALK_MS = 14000;
 const LINEUP_READY_MS = 1500;
 const MATCH_NAME_MAX = 12;
@@ -214,6 +215,10 @@ const state = {
   introStartedAt: 0,
   raceStartAt: 0,
   lineupReadyAt: 0,
+  lineupStartedAt: 0,
+  fanfareEnabled: false,
+  fanfareStarted: false,
+  fanfarePlaying: false,
   raceStarted: false,
   matchName: "エキチューンダービー",
   trackCondition: trackConditions.firm,
@@ -225,6 +230,9 @@ const state = {
   sectionReports: [],
   showStartErrors: false,
   lastFrame: 0,
+  hudLastAt: 0,
+  hudLastLeaderProgress: 0,
+  hudSpeedKmh: 0,
   cameraX: -135,
   cameraZ: 0,
   horseRenderScale: 1,
@@ -241,6 +249,8 @@ const runningStyleSelect = document.querySelector("#runningStyle");
 const traitSelect = document.querySelector("#traitSelect");
 const voiceToggle = document.querySelector("#voiceToggle");
 const labelToggle = document.querySelector("#labelToggle");
+const fanfareToggle = document.querySelector("#fanfareToggle");
+const fanfareSelect = document.querySelector("#fanfareSelect");
 const matchName = document.querySelector("#matchName");
 const matchSuffix = document.querySelector("#matchSuffix");
 const matchNameCount = document.querySelector("#matchNameCount");
@@ -251,6 +261,11 @@ const budgetMessage = document.querySelector("#budgetMessage");
 const racePhase = document.querySelector("#racePhase");
 const distanceReadout = document.querySelector("#distanceReadout");
 const leaderboard = document.querySelector("#leaderboard");
+const broadcastHud = document.querySelector("#broadcastHud");
+const positionMap = document.querySelector("#positionMap");
+const miniCourse = document.querySelector("#miniCourse");
+const remainingReadout = document.querySelector("#remainingReadout");
+const speedReadout = document.querySelector("#speedReadout");
 const raceMeta = document.querySelector("#raceMeta");
 const commentary = document.querySelector("#commentary");
 const resultDetail = document.querySelector("#resultDetail");
@@ -407,6 +422,7 @@ function renderControls() {
   distanceTypeSelect.disabled = state.raceRunning;
   runningStyleSelect.disabled = state.raceRunning;
   traitSelect.disabled = state.raceRunning;
+  fanfareSelect.disabled = state.raceRunning;
   matchName.disabled = state.raceRunning;
   matchSuffix.disabled = state.raceRunning;
   trackConditionPreview.textContent = `芝:${state.trackCondition.label}`;
@@ -493,14 +509,9 @@ function bibCssForNumber(number) {
   return bibColorCss[(number - 1) % bibColorCss.length];
 }
 
-function startReactionDelay(trait) {
-  const base = Math.random() * 0.95;
-  return Math.max(0, base - (trait === "start" ? 0.35 : 0));
-}
-
 function updateRaceMeta() {
   raceMeta.innerHTML = state.raceRunning
-    ? `<span>${escapeHtml(state.matchName)}</span><span>${state.distanceType.label}</span><span>芝:${state.trackCondition.label}</span><span>自動カメラ</span>`
+    ? `<span>${escapeHtml(state.matchName)}</span><span>${state.distanceType.label}</span><span>芝:${state.trackCondition.label}</span>`
     : "";
 }
 
@@ -548,6 +559,87 @@ function speakCommentary(text) {
   utterance.pitch = 1.05;
   utterance.volume = 0.95;
   window.speechSynthesis.speak(utterance);
+}
+
+function playFanfare(onDone) {
+  if (!fanfareToggle.checked) {
+    onDone();
+    return;
+  }
+  playFanfareFile(fanfareSelect.value, onDone);
+}
+
+function playFanfareFile(source, onDone) {
+  if (!source) {
+    playSynthFanfare(onDone);
+    return;
+  }
+  const audio = new Audio(encodeURI(source));
+  audio.volume = 0.9;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    onDone();
+  };
+  audio.addEventListener("ended", finish, { once: true });
+  audio.addEventListener(
+    "error",
+    () => {
+      if (finished) return;
+      finished = true;
+      playSynthFanfare(onDone);
+    },
+    { once: true },
+  );
+  const playPromise = audio.play();
+  if (playPromise) {
+    playPromise.catch(() => {
+      if (finished) return;
+      finished = true;
+      playSynthFanfare(onDone);
+    });
+  }
+}
+
+function playSynthFanfare(onDone = () => {}) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) {
+    onDone();
+    return;
+  }
+  const audio = new AudioCtx();
+  const master = audio.createGain();
+  master.gain.setValueAtTime(0.0001, audio.currentTime);
+  master.gain.exponentialRampToValueAtTime(0.22, audio.currentTime + 0.04);
+  master.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2.55);
+  master.connect(audio.destination);
+
+  const notes = [
+    [523.25, 0, 0.18],
+    [659.25, 0.2, 0.18],
+    [783.99, 0.4, 0.28],
+    [1046.5, 0.74, 0.36],
+    [783.99, 1.18, 0.2],
+    [987.77, 1.4, 0.2],
+    [1174.66, 1.62, 0.55],
+  ];
+  for (const [freq, start, duration] of notes) {
+    for (const detune of [-0.008, 0.008]) {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq * (1 + detune), audio.currentTime + start);
+      gain.gain.setValueAtTime(0.0001, audio.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.2, audio.currentTime + start + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + start + duration);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(audio.currentTime + start);
+      osc.stop(audio.currentTime + start + duration + 0.03);
+    }
+  }
+  window.setTimeout(onDone, 2600);
 }
 
 function makeStats(allocations) {
@@ -624,7 +716,7 @@ function startRace() {
     wobble: Math.random() * 20,
     lineupOffset: 0,
     lineupDuration: LINEUP_WALK_MS * 0.95,
-    startDelay: startReactionDelay(traitSelect.value),
+    startDelay: 0,
     segmentProgress: [],
     condition: randomCondition(),
     isPlayer: true,
@@ -650,7 +742,7 @@ function startRace() {
       wobble: Math.random() * 20,
       lineupOffset: (Math.random() - 0.5) * 10,
       lineupDuration: LINEUP_WALK_MS * (0.82 + Math.random() * 0.32),
-      startDelay: startReactionDelay(trait),
+      startDelay: 0,
       segmentProgress: [],
       condition: randomCondition(),
       isPlayer: false,
@@ -665,7 +757,14 @@ function startRace() {
   state.introStartedAt = performance.now();
   state.raceStartAt = 0;
   state.lineupReadyAt = 0;
+  state.lineupStartedAt = 0;
+  state.fanfareEnabled = fanfareToggle.checked;
+  state.fanfareStarted = false;
+  state.fanfarePlaying = false;
   state.startedAt = 0;
+  state.hudLastAt = 0;
+  state.hudLastLeaderProgress = 0;
+  state.hudSpeedKmh = 0;
   state.lastFrame = state.introStartedAt;
   state.cameraX = -270;
   state.cameraZ = 0;
@@ -673,13 +772,29 @@ function startRace() {
   distanceReadout.textContent = "発走前";
   raceIntroTitle.textContent = state.matchName;
   raceIntroCountdown.textContent = "";
-  raceIntro.classList.add("active");
+  raceIntro.classList.remove("active");
   raceIntro.classList.remove("countdown");
   renderControls();
   leaderboard.innerHTML = "";
+  clearBroadcastHud();
   resultDetail.hidden = true;
   resultDetail.innerHTML = "";
   updateRaceMeta();
+  if (state.fanfareEnabled) {
+    updateCommentary("");
+  } else {
+    beginLineup();
+  }
+  renderHorseLabels();
+}
+
+function beginLineup() {
+  if (!state.raceRunning || state.raceStarted) return;
+  state.fanfarePlaying = false;
+  state.lineupStartedAt = performance.now();
+  state.introStartedAt = state.lineupStartedAt;
+  racePhase.textContent = "本馬場入場";
+  distanceReadout.textContent = "整列中";
   updateCommentary(pickCommentary(commentaryBanks.entry));
   renderHorseLabels();
 }
@@ -742,8 +857,46 @@ function update(now) {
   state.lastFrame = now;
 
   if (state.raceRunning) {
-    const introElapsed = now - state.introStartedAt;
+    if (state.fanfareEnabled && !state.fanfareStarted && !state.lineupStartedAt) {
+      clearBroadcastHud();
+      const titleElapsed = now - state.introStartedAt;
+      if (titleElapsed >= INTRO_FADE_DELAY_MS) raceIntro.classList.add("active");
+      else raceIntro.classList.remove("active");
+      raceIntro.classList.remove("countdown");
+      racePhase.textContent = "開幕演出";
+      distanceReadout.textContent = "発走前";
+      raceIntroTitle.textContent = state.matchName;
+      raceIntroCountdown.textContent = "";
+      render3d(now);
+      if (titleElapsed >= INTRO_TITLE_MS) {
+        state.fanfareStarted = true;
+        state.fanfarePlaying = true;
+        raceIntro.classList.remove("active");
+        raceIntroTitle.textContent = "";
+        racePhase.textContent = "ファンファーレ";
+        distanceReadout.textContent = "演奏中";
+        updateCommentary("ファンファーレ演奏中。");
+        playFanfare(beginLineup);
+      }
+      requestAnimationFrame(update);
+      return;
+    }
+
+    if (state.fanfarePlaying) {
+      clearBroadcastHud();
+      raceIntro.classList.remove("active");
+      raceIntro.classList.remove("countdown");
+      racePhase.textContent = "ファンファーレ";
+      distanceReadout.textContent = "演奏中";
+      raceIntroTitle.textContent = "";
+      raceIntroCountdown.textContent = "";
+      render3d(now);
+      requestAnimationFrame(update);
+      return;
+    }
+    const introElapsed = now - state.lineupStartedAt;
     if (!state.raceStarted) {
+      clearBroadcastHud();
       const lineupRatio = clamp(introElapsed / LINEUP_WALK_MS, 0, 1);
 
       for (const racer of state.racers) {
@@ -759,8 +912,9 @@ function update(now) {
         updateCommentary(pickCommentary(commentaryBanks.ready));
       }
 
-      if (introElapsed < INTRO_TITLE_MS) {
-        raceIntro.classList.add("active");
+      if (!state.fanfareEnabled && introElapsed < INTRO_TITLE_MS) {
+        if (introElapsed >= INTRO_FADE_DELAY_MS) raceIntro.classList.add("active");
+        else raceIntro.classList.remove("active");
         raceIntro.classList.remove("countdown");
         racePhase.textContent = "開幕演出";
         raceIntroTitle.textContent = state.matchName;
@@ -787,19 +941,24 @@ function update(now) {
           delete racer.displayProgress;
           racer.walking = false;
         }
+        const startFocus = trackPosition(0, (TOTAL_HORSES - 1) / 2);
+        state.cameraX = startFocus.x;
+        state.cameraZ = startFocus.z;
+        state.hudLastAt = now;
+        state.hudLastLeaderProgress = 0;
+        state.hudSpeedKmh = 0;
         raceIntro.classList.remove("active");
         raceIntro.classList.remove("countdown");
         racePhase.textContent = "レース中";
         distanceReadout.textContent = `1/${state.laps}周 0m`;
         updateCommentary(pickCommentary(commentaryBanks.start));
         renderLeaderboard();
+        renderBroadcastHud(now);
       }
     } else {
       const leaderBeforeUpdate = Math.max(...state.racers.map((racer) => racer.progress));
       for (const racer of state.racers) {
         if (racer.finishTime !== null) continue;
-        const elapsedRace = (now - state.startedAt) / 1000;
-        if (elapsedRace < racer.startDelay) continue;
         const ratio = racer.progress / state.raceDistance;
         const gap = leaderBeforeUpdate - racer.progress;
         const finalChase = ratio > 0.72 ? (ratio - 0.72) / 0.28 : 0;
@@ -821,6 +980,7 @@ function update(now) {
       const lapMeters = Math.round(leader % TRACK_LENGTH);
       distanceReadout.textContent = `${lap}/${state.laps}周 ${lapMeters}m`;
       renderLeaderboard();
+      renderBroadcastHud(now);
 
       if (state.racers.every((racer) => racer.finishTime !== null)) finishRace();
     }
@@ -833,6 +993,10 @@ function update(now) {
 function finishRace() {
   state.raceRunning = false;
   state.raceStarted = false;
+  state.fanfareEnabled = false;
+  state.fanfareStarted = false;
+  state.fanfarePlaying = false;
+  state.lineupStartedAt = 0;
   state.lineupReadyAt = 0;
   state.raceStartAt = 0;
   app.classList.remove("racing");
@@ -849,6 +1013,7 @@ function finishRace() {
   state.racers = [];
   horseLabels.innerHTML = "";
   leaderboard.innerHTML = "";
+  clearBroadcastHud();
   state.trackCondition = randomTrackCondition();
   renderControls();
 }
@@ -937,7 +1102,7 @@ function renderResultDetail(results) {
         .map((racer, index) => {
           const style = styleLabels[racer.strategy] || "先行";
           const trait = traitDefs[racer.trait]?.label || "末脚";
-          return `<li><strong>${index + 1}着 ${racer.number}番 ${escapeHtml(racer.name)}</strong><br>${racer.finishTime.toFixed(2)}秒 / ${style} / ${trait}<br>調子:${racer.condition.label} / 発走反応:${racer.startDelay.toFixed(2)}秒</li>`;
+          return `<li><strong>${index + 1}着 ${racer.number}番 ${escapeHtml(racer.name)}</strong><br>${racer.finishTime.toFixed(2)}秒 / ${style} / ${trait}<br>調子:${racer.condition.label}</li>`;
         })
         .join("")}
     </ol>
@@ -957,6 +1122,88 @@ function renderLeaderboard() {
       `,
     )
     .join("");
+}
+
+function clearBroadcastHud() {
+  broadcastHud.hidden = true;
+  positionMap.innerHTML = "";
+  miniCourse.innerHTML = "";
+  remainingReadout.textContent = "残り --m";
+  speedReadout.textContent = "--.-km/h";
+}
+
+function renderBroadcastHud(now) {
+  if (!state.raceRunning || !state.raceStarted || !state.racers.length) {
+    clearBroadcastHud();
+    return;
+  }
+
+  const sorted = [...state.racers].sort((a, b) => b.progress - a.progress);
+  const leader = sorted[0];
+  const player = state.racers.find((racer) => racer.isPlayer) || leader;
+  const remaining = Math.max(0, Math.round(state.raceDistance - leader.progress));
+
+  if (state.hudLastAt) {
+    const dt = Math.max(0.001, (now - state.hudLastAt) / 1000);
+    const metersPerSecond = Math.max(0, (leader.progress - state.hudLastLeaderProgress) / dt);
+    const measured = clamp(metersPerSecond * 3.6, 0, 72);
+    state.hudSpeedKmh = state.hudSpeedKmh ? lerp(state.hudSpeedKmh, measured, 0.22) : measured;
+  }
+  state.hudLastAt = now;
+  state.hudLastLeaderProgress = leader.progress;
+
+  positionMap.innerHTML = sorted
+    .map((racer, index) => {
+      const gap = Math.max(0, leader.progress - racer.progress);
+      const left = clamp(88 - gap * 1.15, 8, 92);
+      const row = index % 4;
+      const group = Math.floor(index / 4);
+      const top = clamp(18 + row * 18 + (group % 2) * 6, 16, 84);
+      return `<span class="position-dot ${racer.isPlayer ? "player" : ""}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%;background:${racer.bibColorCss}">${racer.number}</span>`;
+    })
+    .join("");
+
+  miniCourse.innerHTML = `
+    <svg class="mini-track-svg" viewBox="0 0 190 112" aria-hidden="true">
+      <polyline class="mini-track-grass" points="${miniCoursePolyline(0)}"></polyline>
+      <polyline class="mini-track-rail outer" points="${miniCoursePolyline(10)}"></polyline>
+      <polyline class="mini-track-rail mid" points="${miniCoursePolyline(0)}"></polyline>
+      <polyline class="mini-track-rail inner" points="${miniCoursePolyline(-12)}"></polyline>
+      <line class="mini-finish" x1="150" y1="85" x2="158" y2="70"></line>
+    </svg>
+    ${miniCourseDot(leader, "leader")}
+    ${player && player !== leader ? miniCourseDot(player, "player") : ""}
+  `;
+  remainingReadout.textContent = `残り ${remaining}m`;
+  speedReadout.textContent = `${state.hudSpeedKmh.toFixed(1)}km/h`;
+  broadcastHud.hidden = false;
+}
+
+function miniCourseDot(racer, type) {
+  const lapProgress = ((racer.progress % TRACK_LENGTH) + TRACK_LENGTH) % TRACK_LENGTH;
+  const angle = (lapProgress / TRACK_LENGTH) * Math.PI * 2 - Math.PI / 2;
+  const point = miniCoursePoint(angle, 0);
+  const left = point.x;
+  const top = point.y;
+  return `<span class="mini-dot ${racer.isPlayer ? "player" : ""}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%;background:${racer.bibColorCss}" title="${type}">${racer.number}</span>`;
+}
+
+function miniCoursePolyline(offset) {
+  const points = [];
+  for (let i = 0; i <= 96; i += 1) {
+    const angle = (i / 96) * Math.PI * 2 - Math.PI / 2;
+    const p = miniCoursePoint(angle, offset);
+    points.push(`${(p.x * 1.9).toFixed(1)},${(p.y * 1.12).toFixed(1)}`);
+  }
+  return points.join(" ");
+}
+
+function miniCoursePoint(angle, offset = 0) {
+  const p = coursePoint(angle, offset * 0.3);
+  return {
+    x: 50 + (p.x / (TRACK_RX + 48)) * 43,
+    y: 50 + (p.z / (TRACK_RZ + 38)) * 29,
+  };
 }
 
 function resize() {
@@ -987,18 +1234,20 @@ function render3d(now) {
     return;
   }
 
+  const fanfareScene = isFanfareScene();
   const leader = state.racers.reduce((best, racer) => (racer.progress > best.progress ? racer : best), state.racers[0]);
-  if (leader) {
+  if (leader && !fanfareScene) {
     const leaderPos = trackPosition(leader.displayProgress ?? leader.progress, leader.lane);
-    const leaderX = leaderPos.x;
-    const leaderZ = leaderPos.z;
-    state.cameraX += (leaderX - 54 - state.cameraX) * 0.03;
-    state.cameraZ += (leaderZ - state.cameraZ) * 0.045;
+    const focusX = state.raceStarted ? leaderPos.x : leaderPos.x - 18;
+    const followRate = state.raceStarted ? 0.12 : 0.045;
+    state.cameraX += (focusX - state.cameraX) * followRate;
+    state.cameraZ += (leaderPos.z - state.cameraZ) * (state.raceStarted ? 0.14 : 0.06);
   }
 
   const aspect = canvas.width / canvas.height;
   const compactView = isCompactRaceView();
-  const projection = m4Perspective(compactView ? Math.PI / 5.1 : Math.PI / 4.55, aspect, 0.1, 1200);
+  const fov = state.raceStarted ? (compactView ? Math.PI / 5.7 : Math.PI / 6.4) : (compactView ? Math.PI / 5.1 : Math.PI / 4.55);
+  const projection = m4Perspective(fov, aspect, 0.1, 1200);
   const camera = cameraView(compactView);
   const eye = camera.eye;
   const target = camera.target;
@@ -1011,41 +1260,87 @@ function render3d(now) {
 
   drawTrack(viewProjection);
 
+  if (fanfareScene) {
+    drawFanfareBand(viewProjection, now);
+    drawFanfareFlagman(viewProjection, now);
+    horseLabels.innerHTML = "";
+    leaderboard.innerHTML = "";
+    return;
+  }
+
   const sorted = [...state.racers].sort((a, b) => laneZ(a.lane) - laneZ(b.lane));
   for (const racer of sorted) drawHorse3d(viewProjection, racer, now);
   updateHorseLabelPositions(viewProjection);
 }
 
+function isFanfareScene() {
+  return state.fanfarePlaying || (state.fanfareEnabled && !state.fanfareStarted && !state.lineupStartedAt);
+}
+
 function cameraView(compactView) {
+  if (isFanfareScene()) {
+    return compactView
+      ? { eye: [-14, 18, 38], target: [0, 1.8, 0] }
+      : { eye: [-22, 25, 54], target: [0, 1.8, 0] };
+  }
   const leader = state.racers.reduce((best, racer) => (racer.progress > best.progress ? racer : best), state.racers[0]);
   const ratio = leader ? leader.progress / state.raceDistance : 0;
   const lapRatio = leader ? (leader.progress % TRACK_LENGTH) / TRACK_LENGTH : 0;
-  const leaderPos = leader ? trackPosition(leader.displayProgress ?? leader.progress, leader.lane) : { x: state.cameraX, z: state.cameraZ };
   const focusZ = state.cameraZ;
   const onCorner = (lapRatio > 0.16 && lapRatio < 0.42) || (lapRatio > 0.66 && lapRatio < 0.92);
   if (!state.raceStarted) {
     return compactView
-      ? { eye: [state.cameraX - 4, 9, focusZ + 28], target: [state.cameraX + 8, 2.0, focusZ] }
-      : { eye: [state.cameraX - 6, 13, focusZ + 38], target: [state.cameraX + 12, 2.0, focusZ] };
+      ? { eye: [state.cameraX - 10, 10, focusZ + 30], target: [state.cameraX + 1, 2.0, focusZ] }
+      : { eye: [state.cameraX - 14, 14, focusZ + 42], target: [state.cameraX + 2, 2.0, focusZ] };
   }
-  if (ratio > 0.88) {
+  const focus = { x: state.cameraX, z: focusZ, yaw: leader ? trackPosition(leader.progress, leader.lane).yaw : 0 };
+  const inBackStraight = (lapRatio > 0.04 && lapRatio < 0.16) || (lapRatio > 0.52 && lapRatio < 0.64);
+  const inHeadOnZone = ratio > 0.82 || (lapRatio > 0.31 && lapRatio < 0.42) || (lapRatio > 0.82 && lapRatio < 0.93);
+
+  if (inHeadOnZone) {
     return compactView
-      ? { eye: [leaderPos.x - 6, 8, leaderPos.z + 28], target: [leaderPos.x + 8, 2.1, leaderPos.z] }
-      : { eye: [leaderPos.x - 9, 12, leaderPos.z + 38], target: [leaderPos.x + 12, 2.1, leaderPos.z] };
+      ? {
+          eye: localToWorld(focus, [28, 11, -22]),
+          target: localToWorld(focus, [-5, 2.0, 0]),
+        }
+      : {
+          eye: localToWorld(focus, [42, 16, -34]),
+          target: localToWorld(focus, [-8, 2.15, 0]),
+        };
   }
-  if (ratio < 0.15 || onCorner) {
+
+  if (onCorner) {
     return compactView
-      ? { eye: [state.cameraX - 6, 26, focusZ + 58], target: [state.cameraX + 10, 1.5, focusZ] }
-      : { eye: [state.cameraX - 8, 38, focusZ + 78], target: [state.cameraX + 14, 1.5, focusZ] };
+      ? {
+          eye: localToWorld(focus, [-20, 18, 42]),
+          target: localToWorld(focus, [9, 2.1, 0]),
+        }
+      : {
+          eye: localToWorld(focus, [-34, 27, 66]),
+          target: localToWorld(focus, [13, 2.2, 0]),
+        };
   }
-  if (ratio > 0.62) {
+
+  if (inBackStraight) {
     return compactView
-      ? { eye: [state.cameraX - 3, 10, focusZ + 36], target: [state.cameraX + 10, 2.0, focusZ] }
-      : { eye: [state.cameraX - 2, 15, focusZ + 50], target: [state.cameraX + 13, 2.0, focusZ] };
+      ? {
+          eye: localToWorld(focus, [-8, 18, 74]),
+          target: localToWorld(focus, [12, 2.0, 0]),
+        }
+      : {
+          eye: localToWorld(focus, [-12, 28, 112]),
+          target: localToWorld(focus, [18, 2.2, 0]),
+        };
   }
-  return compactView
-    ? { eye: [state.cameraX - 8, 16, focusZ + 38], target: [state.cameraX + 11, 2.0, focusZ - 1] }
-    : { eye: [state.cameraX - 12, 23, focusZ + 52], target: [state.cameraX + 16, 2.1, focusZ] };
+
+  const sideDistance = compactView ? 34 : 44;
+  const height = compactView ? 5.8 : 6.8;
+  const targetLead = ratio > 0.72 ? 12 : 8;
+  const targetHeight = 2.15;
+  return {
+    eye: localToWorld(focus, [-8, height, sideDistance]),
+    target: localToWorld(focus, [targetLead, targetHeight, 0]),
+  };
 }
 
 function renderPreview(now) {
@@ -1083,6 +1378,76 @@ function renderPreview(now) {
     },
     now,
   );
+}
+
+function drawFanfareBand(viewProjection, now) {
+  const pulse = Math.sin(now * 0.006) * 0.08;
+  drawBox(viewProjection, [0, 0.05, 0], [28, 0.14, 12], [0.58, 0.48, 0.28]);
+  drawBox(viewProjection, [0, 0.18, 0], [30, 0.12, 14], [0.18, 0.34, 0.25]);
+
+  const members = [
+    [-10, -2.5, -0.2],
+    [-6, 1.8, 0.16],
+    [-2, -2.2, -0.08],
+    [2, 2.1, 0.12],
+    [6, -1.7, -0.18],
+    [10, 2.4, 0.2],
+  ];
+  for (const [x, z, sway] of members) {
+    const bob = pulse + sway * 0.08;
+    drawBox(viewProjection, [x, 1.05 + bob, z], [0.8, 1.7, 0.55], [0.12, 0.16, 0.2]);
+    drawBox(viewProjection, [x, 2.05 + bob, z], [0.55, 0.55, 0.55], [0.95, 0.82, 0.66]);
+    drawBox(viewProjection, [x, 2.45 + bob, z], [0.75, 0.18, 0.65], [0.84, 0.72, 0.44]);
+    drawBox(viewProjection, [x - 0.42, 1.35 + bob, z], [0.22, 1.1, 0.22], [0.12, 0.16, 0.2], [0, 0, 0.18]);
+    drawBox(viewProjection, [x + 0.42, 1.35 + bob, z], [0.22, 1.1, 0.22], [0.12, 0.16, 0.2], [0, 0, -0.18]);
+    drawBox(viewProjection, [x + 0.92, 1.78 + bob, z], [1.25, 0.22, 0.22], [0.92, 0.78, 0.36]);
+    drawBox(viewProjection, [x + 1.62, 1.78 + bob, z], [0.38, 0.5, 0.5], [0.92, 0.78, 0.36]);
+    drawBox(viewProjection, [x - 0.22, 0.35, z], [0.22, 0.7, 0.22], [0.06, 0.07, 0.08]);
+    drawBox(viewProjection, [x + 0.22, 0.35, z], [0.22, 0.7, 0.22], [0.06, 0.07, 0.08]);
+  }
+
+  for (let x = -13; x <= 13; x += 6.5) {
+    drawBox(viewProjection, [x, 3.0, -5.2], [0.22, 4.2, 0.22], [0.78, 0.78, 0.72]);
+    drawBox(viewProjection, [x, 5.15, -5.2], [3.8, 0.22, 0.7], [0.92, 0.84, 0.56]);
+  }
+}
+
+function drawFanfareFlagman(viewProjection, now) {
+  const base = { x: 13.5, z: -4.2, yaw: -0.25 };
+  const wave = Math.sin(now * 0.018);
+  const armAngle = -0.8 + wave * 0.95;
+  const flagLift = Math.max(0, wave) * 0.45;
+  const skin = [0.92, 0.76, 0.58];
+  const uniform = [0.08, 0.12, 0.16];
+  const cap = [0.86, 0.72, 0.42];
+  const white = [0.96, 0.94, 0.86];
+  const red = [0.86, 0.18, 0.14];
+  const standY = 0.38;
+
+  drawWorldPart(viewProjection, base, [0, 0.16, 0], [2.6, 0.32, 1.95], [0.42, 0.34, 0.2]);
+  drawWorldPart(viewProjection, base, [0, standY + 0.9, 0], [0.58, 1.45, 0.46], uniform);
+  drawWorldPart(viewProjection, base, [0, standY + 1.82, 0], [0.46, 0.46, 0.42], skin);
+  drawWorldPart(viewProjection, base, [0, standY + 2.12, 0], [0.62, 0.16, 0.5], cap);
+  drawWorldPart(viewProjection, base, [-0.22, standY + 0.28, -0.12], [0.18, 0.65, 0.18], uniform, [0, base.yaw, 0.08]);
+  drawWorldPart(viewProjection, base, [0.22, standY + 0.28, 0.12], [0.18, 0.65, 0.18], uniform, [0, base.yaw, -0.08]);
+  drawWorldPart(viewProjection, base, [-0.5, standY + 1.2, 0], [0.18, 0.82, 0.16], uniform, [0, base.yaw, 0.65]);
+  drawWorldPart(viewProjection, base, [0.62, standY + 1.45 + flagLift, 0], [0.16, 1.25, 0.14], uniform, [0, base.yaw, armAngle]);
+  drawWorldPart(viewProjection, base, [1.2, standY + 2.0 + flagLift, 0], [0.1, 1.65, 0.1], [0.72, 0.62, 0.42], [0, base.yaw, armAngle]);
+  drawWorldPart(viewProjection, base, [1.65, standY + 2.48 + flagLift, 0], [0.08, 0.72, 0.52], white, [0, base.yaw, armAngle]);
+  drawWorldPart(viewProjection, base, [1.84, standY + 2.62 + flagLift, 0.01], [0.08, 0.36, 0.54], red, [0, base.yaw, armAngle]);
+}
+
+function drawWorldPart(viewProjection, base, offset, scale, color, rotation) {
+  const cos = Math.cos(base.yaw);
+  const sin = Math.sin(base.yaw);
+  const x = base.x + offset[0] * cos - offset[2] * sin;
+  const z = base.z + offset[0] * sin + offset[2] * cos;
+  drawBox(viewProjection, [x, offset[1], z], scale, color, rotation || [0, base.yaw, 0]);
+}
+
+function drawTrackPart(viewProjection, pos, offset, scale, color, rotation) {
+  const translated = localToWorld(pos, offset);
+  drawBox(viewProjection, translated, scale, color, rotation || [0, pos.yaw, 0]);
 }
 
 function drawHorse3d(viewProjection, racer, now) {
@@ -1127,34 +1492,43 @@ function drawHorse3d(viewProjection, racer, now) {
   const color = racer.coatColor || horseCoatColors[0];
   const bibColor = racer.bibColor || bibColors[0];
   const highlight = color.map((value) => Math.min(1, value * 1.18 + 0.06));
+  const shadow = color.map((value) => Math.max(0, value * 0.58));
   const dark = [0.08, 0.06, 0.05];
+  const black = [0.035, 0.028, 0.022];
   const leather = [0.16, 0.1, 0.07];
   const riderSkin = [0.96, 0.86, 0.72];
   const riderSilk = bibColor;
 
-  drawHorsePart(viewProjection, pos, [-0.1, 1.22 + bob, 0], [2.9 * stretch, 0.86, 0.72], color, [0, yaw, bodyPitch]);
-  drawHorsePart(viewProjection, pos, [-1.08 - gather * 0.06, 1.28 + bob + drive * 0.04, 0], [1.05, 0.78, 0.76], color, [0, yaw, bodyPitch - 0.1]);
-  drawHorsePart(viewProjection, pos, [1.04 + suspension * 0.08, 1.34 + bob - chestDrop, 0], [0.98, 0.82, 0.68], highlight, [0, yaw, bodyPitch + 0.08]);
-  drawHorsePart(viewProjection, pos, [1.5 + headReach * 0.18, 1.82 + bob - landing * 0.13, 0], [0.52, 1.22, 0.42], color, [0, yaw, neckPitch]);
-  drawHorsePart(viewProjection, pos, [2.14 + headReach, 2.02 + bob - landing * 0.22, 0], [0.9, 0.42, 0.45], color, [0, yaw, -0.16 - drive * 0.1 + landing * 0.18]);
-  drawHorsePart(viewProjection, pos, [2.6 + headReach, 1.88 + bob - landing * 0.24, 0], [0.36, 0.28, 0.32], color, [0, yaw, -0.28 - drive * 0.1 + landing * 0.12]);
-  drawHorsePart(viewProjection, pos, [1.2 + headReach * 0.1, 2.02 + bob - landing * 0.12, 0], [0.14, 0.92, 0.14], dark, [0, yaw, neckPitch + 0.06]);
-  drawHorsePart(viewProjection, pos, [2.22 + headReach, 2.34 + bob - landing * 0.16, -0.16], [0.14, 0.32, 0.1], dark, [0, yaw, 0.18]);
-  drawHorsePart(viewProjection, pos, [2.22 + headReach, 2.34 + bob - landing * 0.16, 0.16], [0.14, 0.32, 0.1], dark, [0, yaw, 0.18]);
-  drawHorsePart(viewProjection, pos, [-1.78 - suspension * 0.08, 1.42 + bob + drive * 0.18, 0], [0.22, 1.24, 0.22], dark, [0, yaw, 0.9 + drive * 0.38 - landing * 0.14]);
+  drawHorsePart(viewProjection, pos, [-0.16, 1.28 + bob, 0], [3.28 * stretch, 0.78, 0.62], color, [0, yaw, bodyPitch]);
+  drawHorsePart(viewProjection, pos, [-0.2, 1.02 + bob - 0.02, 0], [2.72 * stretch, 0.34, 0.5], shadow, [0, yaw, bodyPitch - 0.02]);
+  drawHorsePart(viewProjection, pos, [-1.28 - gather * 0.08, 1.32 + bob + drive * 0.04, 0], [1.18, 0.82, 0.68], color, [0, yaw, bodyPitch - 0.08]);
+  drawHorsePart(viewProjection, pos, [1.06 + suspension * 0.08, 1.36 + bob - chestDrop, 0], [1.02, 0.9, 0.6], highlight, [0, yaw, bodyPitch + 0.1]);
+  drawHorsePart(viewProjection, pos, [1.52 + headReach * 0.16, 1.86 + bob - landing * 0.13, 0], [0.42, 1.34, 0.34], color, [0, yaw, neckPitch]);
+  drawHorsePart(viewProjection, pos, [1.26 + headReach * 0.08, 2.08 + bob - landing * 0.1, 0], [0.16, 1.05, 0.11], black, [0, yaw, neckPitch + 0.08]);
+  drawHorsePart(viewProjection, pos, [1.86 + headReach * 0.18, 2.14 + bob - landing * 0.16, 0], [0.12, 0.9, 0.1], black, [0, yaw, neckPitch + 0.18]);
+  drawHorsePart(viewProjection, pos, [2.18 + headReach, 2.0 + bob - landing * 0.22, 0], [0.98, 0.42, 0.38], color, [0, yaw, -0.18 - drive * 0.1 + landing * 0.18]);
+  drawHorsePart(viewProjection, pos, [2.78 + headReach, 1.86 + bob - landing * 0.24, 0], [0.46, 0.26, 0.26], color, [0, yaw, -0.28 - drive * 0.1 + landing * 0.12]);
+  drawHorsePart(viewProjection, pos, [2.94 + headReach, 1.77 + bob - landing * 0.22, 0], [0.14, 0.12, 0.18], [0.03, 0.025, 0.022], [0, yaw, -0.26]);
+  drawHorsePart(viewProjection, pos, [2.36 + headReach, 2.24 + bob - landing * 0.16, -0.2], [0.16, 0.36, 0.1], black, [0, yaw, 0.22]);
+  drawHorsePart(viewProjection, pos, [2.36 + headReach, 2.24 + bob - landing * 0.16, 0.2], [0.16, 0.36, 0.1], black, [0, yaw, 0.22]);
+  drawHorsePart(viewProjection, pos, [-1.94 - suspension * 0.18, 1.38 + bob + drive * 0.18, 0], [0.22, 1.58, 0.18], black, [0, yaw, 1.1 + drive * 0.46 - landing * 0.18]);
+  drawHorsePart(viewProjection, pos, [-2.24 - suspension * 0.22, 1.12 + bob + drive * 0.16, 0], [0.16, 1.0, 0.12], black, [0, yaw, 1.35 + drive * 0.34]);
 
-  drawHorsePart(viewProjection, pos, [-0.35, 1.76 + bob, 0], [1.0, 0.14, 0.8], leather, [0, yaw, bodyPitch]);
-  drawHorsePart(viewProjection, pos, [-0.34, 1.39 + bob, -0.4], [1.14, 0.52, 0.04], bibColor, [0, yaw, bodyPitch]);
-  drawHorsePart(viewProjection, pos, [-0.34, 1.39 + bob, 0.4], [1.14, 0.52, 0.04], bibColor, [0, yaw, bodyPitch]);
-  drawHorsePart(viewProjection, pos, [-0.34, 1.4 + bob, -0.43], [0.42, 0.24, 0.025], [0.96, 0.94, 0.86], [0, yaw, bodyPitch]);
-  drawHorsePart(viewProjection, pos, [-0.34, 1.4 + bob, 0.43], [0.42, 0.24, 0.025], [0.96, 0.94, 0.86], [0, yaw, bodyPitch]);
+  drawHorsePart(viewProjection, pos, [-0.28, 1.78 + bob, 0], [1.08, 0.12, 0.72], leather, [0, yaw, bodyPitch]);
+  drawHorsePart(viewProjection, pos, [-0.34, 1.4 + bob, -0.37], [1.38, 0.68, 0.055], [0.94, 0.93, 0.86], [0, yaw, bodyPitch]);
+  drawHorsePart(viewProjection, pos, [-0.34, 1.4 + bob, 0.37], [1.38, 0.68, 0.055], [0.94, 0.93, 0.86], [0, yaw, bodyPitch]);
+  drawHorsePart(viewProjection, pos, [-0.34, 1.4 + bob, -0.43], [0.9, 0.5, 0.035], bibColor, [0, yaw, bodyPitch]);
+  drawHorsePart(viewProjection, pos, [-0.34, 1.4 + bob, 0.43], [0.9, 0.5, 0.035], bibColor, [0, yaw, bodyPitch]);
   drawBibNumber(viewProjection, pos, bob, bodyPitch, racer.number, -0.455);
   drawBibNumber(viewProjection, pos, bob, bodyPitch, racer.number, 0.455);
-  drawHorsePart(viewProjection, pos, [-0.24, 2.0 + bob - suspension * 0.08, 0], [0.5, 0.64, 0.42], riderSilk, [0, yaw, 0.5 + bodyPitch + drive * 0.08]);
-  drawHorsePart(viewProjection, pos, [-0.14, 2.47 + bob - suspension * 0.08, 0], [0.38, 0.38, 0.36], riderSkin);
-  drawHorsePart(viewProjection, pos, [-0.13, 2.72 + bob - suspension * 0.08, 0], [0.5, 0.16, 0.42], riderSilk);
-  drawHorsePart(viewProjection, pos, [-0.64, 1.7 + bob, -0.28], [0.16, 0.9, 0.14], leather, [0, yaw, 0.5 + drive * 0.16 - landing * 0.08]);
-  drawHorsePart(viewProjection, pos, [-0.64, 1.7 + bob, 0.28], [0.16, 0.9, 0.14], leather, [0, yaw, -0.5 - drive * 0.16 + landing * 0.08]);
+  const riderLean = state.raceStarted ? 1.1 + drive * 0.1 : 0.55 + bodyPitch;
+  drawHorsePart(viewProjection, pos, [-0.22, 2.0 + bob - suspension * 0.08, 0], [0.44, 0.76, 0.34], riderSilk, [0, yaw, riderLean]);
+  drawHorsePart(viewProjection, pos, [0.1, 2.34 + bob - suspension * 0.08, 0], [0.36, 0.36, 0.32], riderSkin);
+  drawHorsePart(viewProjection, pos, [0.18, 2.58 + bob - suspension * 0.08, 0], [0.52, 0.18, 0.38], riderSilk, [0, yaw, 0.04]);
+  drawHorsePart(viewProjection, pos, [-0.58, 1.65 + bob, -0.25], [0.15, 0.82, 0.12], leather, [0, yaw, 0.86 + drive * 0.16 - landing * 0.08]);
+  drawHorsePart(viewProjection, pos, [-0.58, 1.65 + bob, 0.25], [0.15, 0.82, 0.12], leather, [0, yaw, -0.86 - drive * 0.16 + landing * 0.08]);
+  drawHorsePart(viewProjection, pos, [1.04, 1.72 + bob, -0.32], [1.8, 0.07, 0.055], leather, [0, yaw, -0.14]);
+  drawHorsePart(viewProjection, pos, [1.04, 1.72 + bob, 0.32], [1.8, 0.07, 0.055], leather, [0, yaw, -0.14]);
 
   const legs = [
     { x: -1.0, z: -0.28, phase: walking ? 0.0 : 0.0, rear: true },
@@ -1164,13 +1538,16 @@ function drawHorse3d(viewProjection, racer, now) {
   ];
   for (const leg of legs) {
     const pose = idle ? idleLegPose(leg.rear, leg.z, cycle) : walking ? walkLegPose(cycle, leg.phase, leg.rear) : gallopLegPose(cycle, leg.phase, leg.rear, effort);
-    const hip = [leg.x, 1.02 + bob * 0.14, leg.z];
-    const knee = [leg.x + pose.kneeX, pose.kneeY + bob * 0.05, leg.z];
+    const legRootY = 0.92 + bob - (state.raceStarted ? 0.02 : 0);
+    const kneeFollow = idle ? bob * 0.18 : walking ? bob * 0.22 : bob * 0.34;
+    const hip = [leg.x, legRootY, leg.z];
+    const knee = [leg.x + pose.kneeX, pose.kneeY + kneeFollow, leg.z];
     const hoof = [leg.x + pose.hoofX, pose.hoofY, leg.z];
-    drawHorsePart(viewProjection, pos, midpoint(hip, knee), [0.2, distance3(hip, knee), 0.16], dark, [0, yaw, legSegmentAngle(hip, knee)]);
-    drawHorsePart(viewProjection, pos, knee, [0.26, 0.2, 0.2], [0.11, 0.08, 0.06]);
-    drawHorsePart(viewProjection, pos, midpoint(knee, hoof), [0.15, distance3(knee, hoof), 0.13], dark, [0, yaw, legSegmentAngle(knee, hoof)]);
-    drawHorsePart(viewProjection, pos, [hoof[0] + 0.1, hoof[1] - 0.02, hoof[2]], [0.46, 0.11, 0.22], [0.04, 0.035, 0.03], [0, yaw, legSegmentAngle(knee, hoof) * 0.25]);
+    drawHorsePart(viewProjection, pos, hip, [0.28, 0.22, 0.18], shadow, [0, yaw, bodyPitch]);
+    drawHorsePart(viewProjection, pos, midpoint(hip, knee), [0.18, distance3(hip, knee), 0.13], dark, [0, yaw, legSegmentAngle(hip, knee)]);
+    drawHorsePart(viewProjection, pos, knee, [0.24, 0.18, 0.17], [0.1, 0.075, 0.055]);
+    drawHorsePart(viewProjection, pos, midpoint(knee, hoof), [0.12, distance3(knee, hoof), 0.1], black, [0, yaw, legSegmentAngle(knee, hoof)]);
+    drawHorsePart(viewProjection, pos, [hoof[0] + 0.12, hoof[1] - 0.02, hoof[2]], [0.5, 0.1, 0.2], [0.035, 0.03, 0.026], [0, yaw, legSegmentAngle(knee, hoof) * 0.25]);
   }
 }
 
@@ -1184,10 +1561,10 @@ function drawHorsePart(viewProjection, pos, offset, scale, color, rotation) {
 
 function drawBibNumber(viewProjection, pos, bob, bodyPitch, number, z) {
   const digits = String(number).split("");
-  const digitGap = digits.length === 1 ? 0 : 0.13;
+  const digitGap = digits.length === 1 ? 0 : 0.18;
   const startX = -0.34 - ((digits.length - 1) * digitGap) / 2;
   digits.forEach((digit, index) => {
-    drawBibDigit(viewProjection, pos, bob, bodyPitch, Number(digit), startX + index * digitGap, z, digits.length === 1 ? 1 : 0.72);
+    drawBibDigit(viewProjection, pos, bob, bodyPitch, Number(digit), startX + index * digitGap, z, digits.length === 1 ? 1.48 : 1.02);
   });
 }
 
@@ -1196,13 +1573,13 @@ function drawBibDigit(viewProjection, pos, bob, bodyPitch, digit, x, z, scale = 
   const color = [0.05, 0.045, 0.04];
   const y = 1.405 + bob;
   const segmentMap = {
-    a: [0, 0.075, 0.16, 0.026],
-    b: [0.09, 0.035, 0.028, 0.092],
-    c: [0.09, -0.055, 0.028, 0.092],
-    d: [0, -0.105, 0.16, 0.026],
-    e: [-0.09, -0.055, 0.028, 0.092],
-    f: [-0.09, 0.035, 0.028, 0.092],
-    g: [0, -0.015, 0.15, 0.024],
+    a: [0, 0.09, 0.18, 0.036],
+    b: [0.105, 0.04, 0.04, 0.105],
+    c: [0.105, -0.065, 0.04, 0.105],
+    d: [0, -0.12, 0.18, 0.036],
+    e: [-0.105, -0.065, 0.04, 0.105],
+    f: [-0.105, 0.04, 0.04, 0.105],
+    g: [0, -0.018, 0.17, 0.034],
   };
 
   for (const segment of segments) {
@@ -1238,12 +1615,10 @@ function drawTrack(viewProjection) {
   drawGrandstands(viewProjection);
 
   const segments = 192;
-  drawOvalRing(
+  drawCourseRing(
     viewProjection,
-    TRACK_RX + TRACK_MARGIN + 7,
-    TRACK_RZ + TRACK_MARGIN + 7,
-    TRACK_RX - TRACK_MARGIN - 7,
-    TRACK_RZ - TRACK_MARGIN - 7,
+    TRACK_MARGIN + 7,
+    -TRACK_MARGIN - 7,
     state.trackCondition?.turf || [0.26, 0.54, 0.3],
     0.02,
   );
@@ -1262,6 +1637,8 @@ function drawTrack(viewProjection) {
   }
 
   const finish = trackPosition(0, centerLane);
+  drawBox(viewProjection, [finish.x, 0.08, finish.z], [72, 0.08, 1.3], [0.96, 0.95, 0.86], [0, finish.yaw + Math.PI / 2, 0]);
+  drawBox(viewProjection, [finish.x, 0.13, finish.z], [72, 0.04, 0.16], [0.15, 0.16, 0.14], [0, finish.yaw + Math.PI / 2, 0]);
   drawBox(viewProjection, [finish.x, 5.2, finish.z - 31], [0.55, 10, 0.55], [0.95, 0.92, 0.82]);
   drawBox(viewProjection, [finish.x, 5.2, finish.z + 31], [0.55, 10, 0.55], [0.95, 0.92, 0.82]);
 }
@@ -1317,19 +1694,23 @@ function drawGrandstands(viewProjection) {
   }
 }
 
-function drawOvalRing(viewProjection, outerRx, outerRz, innerRx, innerRz, color, y, segments = 192) {
+function drawCourseRing(viewProjection, outerOffset, innerOffset, color, y, segments = 192) {
   const positions = [];
   const normals = [];
   for (let i = 0; i < segments; i += 1) {
     const a0 = (i / segments) * Math.PI * 2;
     const a1 = ((i + 1) / segments) * Math.PI * 2;
+    const o0 = coursePoint(a0, outerOffset);
+    const o1 = coursePoint(a1, outerOffset);
+    const i1 = coursePoint(a1, innerOffset);
+    const i0 = coursePoint(a0, innerOffset);
     const quad = [
-      [Math.cos(a0) * outerRx, y, Math.sin(a0) * outerRz],
-      [Math.cos(a1) * outerRx, y, Math.sin(a1) * outerRz],
-      [Math.cos(a1) * innerRx, y, Math.sin(a1) * innerRz],
-      [Math.cos(a0) * outerRx, y, Math.sin(a0) * outerRz],
-      [Math.cos(a1) * innerRx, y, Math.sin(a1) * innerRz],
-      [Math.cos(a0) * innerRx, y, Math.sin(a0) * innerRz],
+      [o0.x, y, o0.z],
+      [o1.x, y, o1.z],
+      [i1.x, y, i1.z],
+      [o0.x, y, o0.z],
+      [i1.x, y, i1.z],
+      [i0.x, y, i0.z],
     ];
     for (const point of quad) {
       positions.push(point[0], point[1], point[2]);
@@ -1391,13 +1772,37 @@ function trackPosition(progress, lane) {
   const lapProgress = ((progress % TRACK_LENGTH) + TRACK_LENGTH) % TRACK_LENGTH;
   const angle = (lapProgress / TRACK_LENGTH) * Math.PI * 2 - Math.PI / 2;
   const laneOffset = (lane - (TOTAL_HORSES - 1) / 2) * LANE_WIDTH;
-  const rx = TRACK_RX + laneOffset;
-  const rz = TRACK_RZ + laneOffset;
-  const x = Math.cos(angle) * rx;
-  const z = Math.sin(angle) * rz;
-  const dx = -Math.sin(angle) * rx;
-  const dz = Math.cos(angle) * rz;
+  const point = coursePoint(angle, laneOffset);
+  const ahead = coursePoint(angle + 0.002, laneOffset);
+  const behind = coursePoint(angle - 0.002, laneOffset);
+  const x = point.x;
+  const z = point.z;
+  const dx = ahead.x - behind.x;
+  const dz = ahead.z - behind.z;
   return { x, z, yaw: Math.atan2(-dz, dx), angle };
+}
+
+function coursePoint(angle, laneOffset = 0) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const right = Math.max(0, c);
+  const left = Math.max(0, -c);
+  const upper = Math.max(0, -s);
+  const lower = Math.max(0, s);
+  const rx = TRACK_RX + laneOffset * 1.08;
+  const rz = TRACK_RZ + laneOffset * 0.68;
+  const pinch = right ** 2.4;
+  const hook = right * upper;
+  const exit = right * lower;
+  const skew = 0.23;
+  const baseX = c * rx;
+  const baseZ = s * rz * (1 - pinch * 0.28 + left * 0.05);
+  const x = baseX + baseZ * skew + pinch * 34 + hook * 20 - exit * 8 - left ** 2 * 10;
+  const z = baseZ - baseX * 0.08 + hook * 18 - exit * 13 + left * upper * 6;
+  return {
+    x,
+    z,
+  };
 }
 
 function localToWorld(pos, offset) {
